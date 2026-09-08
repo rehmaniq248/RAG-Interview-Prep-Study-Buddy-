@@ -47,6 +47,19 @@ Get an API key at [console.anthropic.com](https://console.anthropic.com/settings
 Then drop your resume and project write-ups into `documents/` as `.txt` or
 `.md` files. See [`documents/README.md`](documents/README.md) for what to write.
 
+## Inspecting your chunks
+
+Before embedding anything, see how your documents get split:
+
+```bash
+python -m rag_buddy.ingest
+```
+
+This prints every chunk with its heading trail and token estimate, and costs
+nothing. It is worth reading: most "the answers are bad" problems in a RAG
+system are visible right here, as chunks cut in odd places or mixing two
+unrelated topics.
+
 ## Cost
 
 | Step | Runs where | Cost |
@@ -72,7 +85,8 @@ gitignored, as is `.env`.
 rag-study-buddy/
 ├── documents/          your resume and write-ups (gitignored)
 ├── rag_buddy/          the package
-│   └── config.py       paths, model names, and tuning knobs
+│   ├── config.py       paths, model names, and tuning knobs
+│   └── ingest.py       reads documents/ and splits them into chunks
 ├── chroma_db/          local vector store (generated, gitignored)
 ├── requirements.txt
 └── .env.example
@@ -83,7 +97,7 @@ rag-study-buddy/
 Built step by step. Currently complete:
 
 - [x] 1. Project setup
-- [ ] 2. Ingestion + chunking
+- [x] 2. Ingestion + chunking
 - [ ] 3. Local embedding + ChromaDB storage
 - [ ] 4. Retrieval
 - [ ] 5. Grounded answer generation with citations

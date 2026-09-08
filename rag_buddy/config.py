@@ -44,6 +44,27 @@ EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 # small — see the chunking step.
 EMBEDDING_MAX_TOKENS = 256
 
+# --- Chunking --------------------------------------------------------------
+# We measure chunk size in WORDS, not tokens, because counting real tokens
+# would mean loading the embedding model just to split text. The conversion is
+# roughly 1 word ≈ 1.3 word-pieces for ordinary English prose, so we keep a
+# deliberate safety margin below EMBEDDING_MAX_TOKENS: 180 words ≈ 234
+# word-pieces. Step 3 verifies this against the real tokenizer and warns if
+# any chunk would actually be truncated.
+WORDS_TO_TOKENS_RATIO = 1.3
+CHUNK_TARGET_WORDS = 180
+
+# Chunks shorter than this are weak retrieval units — a lone sentence rarely
+# carries enough context to answer anything — so we pack neighbouring
+# paragraphs together until we clear this floor.
+CHUNK_MIN_WORDS = 40
+
+# Carry the last N sentences of each chunk into the start of the next one.
+# This is "overlap": it stops an idea that straddles a chunk boundary from
+# being lost by both chunks. Costs a little duplicated storage, which is free
+# here because storage is local.
+CHUNK_OVERLAP_SENTENCES = 1
+
 # --- Vector store ----------------------------------------------------------
 COLLECTION_NAME = "interview_prep"
 
@@ -58,6 +79,15 @@ DISTANCE_METRIC = "cosine"
 # Claude Haiku 4.5: the cheapest current Claude model.
 # Pricing at time of writing: $1.00 per 1M input tokens, $5.00 per 1M output.
 GENERATION_MODEL = "claude-haiku-4-5"
+
+# Interview mode (step 6) grades your spoken/typed answer against what your
+# write-up actually says. That is a far harder judgement call than answering a
+# question from supplied text, and a weak grader is a generous grader — it
+# will tell you an answer was fine when you left out the tradeoff you actually
+# made. This knob exists so you can measure that rather than guess: leave it on
+# Haiku, and if grading feels soft, point it at "claude-sonnet-5" ($2.00 per
+# 1M input / $10.00 per 1M output) for evaluation only, while Q&A stays cheap.
+EVALUATION_MODEL = GENERATION_MODEL
 
 # How many chunks we feed the model as context. Keeping this small is the main
 # cost control in the whole project: each extra chunk is extra input tokens on
