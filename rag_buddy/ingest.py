@@ -76,7 +76,11 @@ class Chunk:
         embedded, so the chunk becomes findable by the name of the thing it is
         actually about. Cheap fix, large quality gain.
         """
-        return f"{self.section}\n\n{self.text}" if self.section else self.text
+        if not self.section:
+            return self.text
+        # Deepest N levels only — see EMBED_HEADING_LEVELS in config.
+        levels = self.section.split(" > ")[-config.EMBED_HEADING_LEVELS :]
+        return f"{' > '.join(levels)}\n\n{self.text}"
 
     def estimated_tokens(self) -> int:
         """Rough word-piece count. Verified against the real tokenizer in step 3."""

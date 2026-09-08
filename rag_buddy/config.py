@@ -51,8 +51,19 @@ EMBEDDING_MAX_TOKENS = 256
 # deliberate safety margin below EMBEDDING_MAX_TOKENS: 180 words ≈ 234
 # word-pieces. Step 3 verifies this against the real tokenizer and warns if
 # any chunk would actually be truncated.
+# Measured against the real tokenizer on sample prose: 1.25 word-pieces per
+# word. We budget at 1.3 to stay conservative.
 WORDS_TO_TOKENS_RATIO = 1.3
-CHUNK_TARGET_WORDS = 180
+
+# The heading breadcrumb is embedded ALONGSIDE the body text, so it eats into
+# the same 256-token window. Measured at 8–29 tokens on real write-ups; we
+# reserve 40 so a document with long headings still fits. Forgetting this
+# reserve is what pushed our first build to 245/256 — uncomfortably close to
+# silent truncation.
+HEADING_TOKEN_RESERVE = 40
+
+# Body budget: (256 - 40 reserved) / 1.3 ≈ 166 words. Rounded down.
+CHUNK_TARGET_WORDS = 160
 
 # Chunks shorter than this are weak retrieval units — a lone sentence rarely
 # carries enough context to answer anything — so we pack neighbouring
@@ -64,6 +75,15 @@ CHUNK_MIN_WORDS = 40
 # being lost by both chunks. Costs a little duplicated storage, which is free
 # here because storage is local.
 CHUNK_OVERLAP_SENTENCES = 1
+
+# How many of the deepest heading levels to prepend to the embedded text.
+# The full trail ("Example > Project: Trailhead — a route-planning app for day
+# hikers > Architecture") is mostly redundant: the document title is already
+# in the `source` metadata, and every extra heading word competes with the
+# body for room in a 384-number vector, diluting what the chunk is "about".
+# The deepest two levels carry the useful signal. The FULL trail is still kept
+# for citations — this only trims what gets embedded.
+EMBED_HEADING_LEVELS = 2
 
 # --- Vector store ----------------------------------------------------------
 COLLECTION_NAME = "interview_prep"

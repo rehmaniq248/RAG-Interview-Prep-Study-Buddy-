@@ -60,6 +60,22 @@ nothing. It is worth reading: most "the answers are bad" problems in a RAG
 system are visible right here, as chunks cut in odd places or mixing two
 unrelated topics.
 
+## Building the index
+
+Once your documents are in `documents/`:
+
+```bash
+python -m rag_buddy.store
+```
+
+This embeds every chunk on your machine and writes them to `chroma_db/`. The
+first run downloads the ~90 MB embedding model; after that it works offline.
+Re-run it whenever you edit your documents — it rebuilds from scratch, so no
+stale text survives.
+
+It also verifies every chunk against the model's real tokenizer and warns you
+if any would be silently truncated.
+
 ## Cost
 
 | Step | Runs where | Cost |
@@ -86,7 +102,8 @@ rag-study-buddy/
 ├── documents/          your resume and write-ups (gitignored)
 ├── rag_buddy/          the package
 │   ├── config.py       paths, model names, and tuning knobs
-│   └── ingest.py       reads documents/ and splits them into chunks
+│   ├── ingest.py       reads documents/ and splits them into chunks
+│   └── store.py        embeds chunks locally and stores them in ChromaDB
 ├── chroma_db/          local vector store (generated, gitignored)
 ├── requirements.txt
 └── .env.example
@@ -98,7 +115,7 @@ Built step by step. Currently complete:
 
 - [x] 1. Project setup
 - [x] 2. Ingestion + chunking
-- [ ] 3. Local embedding + ChromaDB storage
+- [x] 3. Local embedding + ChromaDB storage
 - [ ] 4. Retrieval
 - [ ] 5. Grounded answer generation with citations
 - [ ] 6. Interview mode
