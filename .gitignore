@@ -1,0 +1,23 @@
+# --- Your personal documents: NEVER commit these ---------------------------
+# This tool is meant to be used with your own resume and project write-ups.
+# Everything you drop in documents/ stays on your machine.
+documents/*
+!documents/README.md
+!documents/example_project_writeup.md
+
+# --- Generated data --------------------------------------------------------
+chroma_db/          # the local vector store (rebuildable from documents/)
+
+# --- Secrets ---------------------------------------------------------------
+.env
+
+# --- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# --- macOS -----------------------------------------------------------------
+.DS_Store

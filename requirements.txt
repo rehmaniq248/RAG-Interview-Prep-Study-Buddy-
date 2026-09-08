@@ -1,0 +1,23 @@
+# ---------------------------------------------------------------------------
+# Dependencies for the RAG Interview Prep Study Buddy
+#
+# Cost note: only ONE of these talks to a paid service (anthropic). Embedding
+# and vector search run entirely on your machine and are free.
+# ---------------------------------------------------------------------------
+
+# Local embedding model. Downloads a small open-source model (~90 MB) the first
+# time you run it, then runs offline on your CPU. No API, no per-token cost.
+sentence-transformers>=3.0.0
+
+# Local vector database. Stores chunks + their embeddings in a folder on disk
+# and does the nearest-neighbour search for retrieval. No server, no cost.
+chromadb>=0.5.0
+
+# The ONLY paid dependency: used exclusively for the final answer-generation
+# step (Claude Haiku).
+# NOTE: the 1.x line requires Python 3.10+ and has breaking changes vs 0.x.
+anthropic>=1.0.0,<2.0.0
+
+# Loads your ANTHROPIC_API_KEY from a local .env file so the key never has to
+# be pasted into the code.
+python-dotenv>=1.0.0
