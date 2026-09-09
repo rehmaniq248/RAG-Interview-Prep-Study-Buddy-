@@ -31,7 +31,6 @@ result means asking questions later is instant.
 
 from __future__ import annotations
 
-import shutil
 import time
 from dataclasses import dataclass
 
@@ -192,10 +191,21 @@ def build_index(rebuild: bool = True) -> dict:
 
     report = check_truncation(chunks)
 
-    if rebuild and config.CHROMA_DIR.exists():
-        shutil.rmtree(config.CHROMA_DIR)
+    client = get_client()
+    if rebuild:
+        # Drop the collection through Chroma's API rather than deleting the
+        # directory. Chroma caches clients by path, so removing the files under
+        # a live client leaves a stale handle pointing at a deleted SQLite file
+        # — the next write then fails with "attempt to write a readonly
+        # database". That never shows up when running this module directly,
+        # only from a long-lived process like the CLI menu, which has already
+        # opened the store to show its status.
+        try:
+            client.delete_collection(config.COLLECTION_NAME)
+        except Exception:
+            pass  # nothing to drop on a first run
 
-    collection = get_collection()
+    collection = get_collection(client)
 
     started = time.perf_counter()
     vectors = embed_texts([c.embedding_text() for c in chunks])

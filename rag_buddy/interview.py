@@ -295,8 +295,13 @@ def grade_answer(
 # ---------------------------------------------------------------------------
 
 
-def run_session(source: str | None = None, n_questions: int | None = None) -> None:
-    """Generate questions, take your answers, grade each one."""
+def run_session(source: str | None = None, n_questions: int | None = None) -> Usage:
+    """
+    Generate questions, take your answers, grade each one.
+
+    Returns the session's Usage so a caller (the CLI menu) can fold this into a
+    running total across modes.
+    """
     usage = Usage()
     client = get_client()
 
@@ -308,7 +313,7 @@ def run_session(source: str | None = None, n_questions: int | None = None) -> No
     questions = generate_questions(excerpts, n_questions, client=client, usage=usage)
     if not questions:
         print("The model returned no usable questions. Try running it again.")
-        return
+        return usage
 
     print(f"{len(questions)} question(s) ready. "
           f"Type your answer and press Enter. "
@@ -343,6 +348,7 @@ def run_session(source: str | None = None, n_questions: int | None = None) -> No
     print(f"Cost: {usage.summary()}")
     if graded:
         print(f"Average per graded answer: ${usage.cost / graded:.6f}")
+    return usage
 
 
 def main() -> None:

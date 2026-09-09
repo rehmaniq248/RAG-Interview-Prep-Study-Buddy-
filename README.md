@@ -47,6 +47,27 @@ Get an API key at [console.anthropic.com](https://console.anthropic.com/settings
 Then drop your resume and project write-ups into `documents/` as `.txt` or
 `.md` files. See [`documents/README.md`](documents/README.md) for what to write.
 
+## Running it
+
+```bash
+python -m rag_buddy
+```
+
+That opens a menu: ingest documents, ask a question, or start an interview
+session. It shows what's currently indexed and totals up what the session cost
+when you quit.
+
+Each step is also runnable on its own, which is the fastest way to debug a
+disappointing answer:
+
+```bash
+python -m rag_buddy.ingest                  # see how documents get chunked
+python -m rag_buddy.store                   # rebuild the index
+python -m rag_buddy.retrieve "a question"   # see what gets retrieved
+python -m rag_buddy.generate "a question"   # one grounded answer
+python -m rag_buddy.interview               # a practice session
+```
+
 ## Inspecting your chunks
 
 Before embedding anything, see how your documents get split:
@@ -160,7 +181,8 @@ rag-study-buddy/
 │   ├── store.py        embeds chunks locally and stores them in ChromaDB
 │   ├── retrieve.py     finds the top-k chunks for a question
 │   ├── generate.py     asks Claude Haiku to answer from those chunks
-│   └── interview.py    generates questions and grades your answers
+│   ├── interview.py    generates questions and grades your answers
+│   └── cli.py          the menu tying it together
 ├── chroma_db/          local vector store (generated, gitignored)
 ├── requirements.txt
 └── .env.example
@@ -168,7 +190,7 @@ rag-study-buddy/
 
 ## Status
 
-Built step by step. Currently complete:
+Complete:
 
 - [x] 1. Project setup
 - [x] 2. Ingestion + chunking
