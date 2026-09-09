@@ -108,9 +108,46 @@ def iter_document_paths(documents_dir: Path | None = None) -> list[Path]:
     )
 
 
+# Magic bytes for formats people routinely rename to .md or .txt. Extensions
+# are a claim; these are evidence.
+_BINARY_SIGNATURES = {
+    b"%PDF": "a PDF",
+    b"PK\x03\x04": "a Word/Office document (or other zip-based format)",
+    b"\xd0\xcf\x11\xe0": "an old-style Word/Office document",
+    b"{\\rtf": "an RTF document",
+}
+
+
 def read_document(path: Path) -> str:
-    """Read a file as UTF-8, tolerating the odd stray byte rather than crashing."""
-    return path.read_text(encoding="utf-8", errors="replace")
+    """
+    Read a file as UTF-8, refusing anything that is not really text.
+
+    WHY THIS CHECK EXISTS: renaming a PDF to .md does not make it markdown, and
+    without this the failure is silent and expensive. The bytes decode into
+    thousands of replacement characters, get chunked, get embedded, and sit in
+    the vector store as noise that pollutes every search — while the tool
+    reports a cheerful "indexed 1 document". Better to refuse loudly here.
+    """
+    head = path.read_bytes()[:8]
+    for signature, description in _BINARY_SIGNATURES.items():
+        if head.startswith(signature):
+            raise ValueError(
+                f"{path.name} is {description}, not text — despite the "
+                f"{path.suffix} extension.\n"
+                f"This tool reads plain .txt and .md only. Convert it first: "
+                f"open the file, copy the text, and save it as a .md file."
+            )
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+
+    # Some binary formats have no signature we know. A high proportion of
+    # replacement characters means the decode went badly.
+    if text and text.count("\ufffd") / len(text) > 0.05:
+        raise ValueError(
+            f"{path.name} does not appear to be readable text — over 5% of it "
+            f"failed to decode. This tool reads plain .txt and .md only."
+        )
+    return text
 
 
 # ---------------------------------------------------------------------------

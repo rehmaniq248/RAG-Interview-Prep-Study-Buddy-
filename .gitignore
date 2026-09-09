@@ -3,10 +3,13 @@
 # Everything you drop in documents/ stays on your machine.
 documents/*
 !documents/README.md
-!documents/example_project_writeup.md
 
 # --- Generated data --------------------------------------------------------
-chroma_db/          # the local vector store (rebuildable from documents/)
+# The local vector store. Rebuildable from documents/ at any time.
+# NOTE: a trailing '#' comment on this line would NOT be treated as a
+# comment — .gitignore only honours '#' at the start of a line, and the
+# pattern would silently match nothing.
+chroma_db/
 
 # --- Secrets ---------------------------------------------------------------
 .env

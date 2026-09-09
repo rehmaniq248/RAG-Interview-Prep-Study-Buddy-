@@ -21,5 +21,13 @@ The tool can only answer from what you actually wrote down. Two habits help a lo
 - **Include the specifics you'd be asked about** — numbers, tradeoffs you
   rejected, what broke. Vague write-ups produce vague interview questions.
 
-Use `example_project_writeup.md` as a shape to copy. Delete it once you have
-your own files in here.
+`examples/example_project_writeup.md` in the repo root shows the shape to copy.
+Copy it in here if you want something to test with before writing your own:
+
+```bash
+cp examples/example_project_writeup.md documents/
+```
+
+Remove it again once you have real files. Sample content in this folder
+competes with your real documents at retrieval time, and an answer citing a
+project you never worked on is worse than no answer.

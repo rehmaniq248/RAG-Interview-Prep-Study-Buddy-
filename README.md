@@ -175,6 +175,7 @@ gitignored, as is `.env`.
 ```
 rag-study-buddy/
 ├── documents/          your resume and write-ups (gitignored)
+├── examples/           a sample write-up to test with
 ├── rag_buddy/          the package
 │   ├── config.py       paths, model names, and tuning knobs
 │   ├── ingest.py       reads documents/ and splits them into chunks
