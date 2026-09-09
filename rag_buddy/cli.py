@@ -49,7 +49,12 @@ def show_status() -> None:
         print(f"            Put .txt or .md files in {config.DOCUMENTS_DIR.name}/ "
               f"and choose option 1.")
 
-    print(f"  API key : {'set' if have_key else 'NOT SET — options 2 and 3 need one'}")
+    from .scaffold import DRAFTS_DIR
+    pending = len(list(DRAFTS_DIR.glob("*.md"))) if DRAFTS_DIR.is_dir() else 0
+    if pending:
+        print(f"  Drafts  : {pending} awaiting your answers in drafts/ (not indexed)")
+
+    print(f"  API key : {'set' if have_key else 'NOT SET — options 2, 3 and 5 need one'}")
     print(f"  Models  : {config.GENERATION_MODEL} for answers, "
           f"{config.EVALUATION_MODEL} for grading")
     print("=" * 60)
@@ -161,12 +166,76 @@ def do_interview(usage: Usage) -> None:
         usage.cost += session.cost
 
 
+def do_github() -> None:
+    """Pull repository facts into documents/github/."""
+    from .github import list_repos, sync_repos, require_gh
+
+    try:
+        require_gh()
+        repos = list_repos()
+    except RuntimeError as exc:
+        print(f"\n{exc}")
+        return
+
+    print(f"\n{len(repos)} repositories:\n")
+    for i, r in enumerate(repos, start=1):
+        lang = (r["primaryLanguage"] or {}).get("name", "—")
+        print(f"  {i:>2}. {r['nameWithOwner']:<50} {lang:<12} {r['updatedAt'][:10]}")
+
+    print("\nEnter numbers to fetch (e.g. 1 3 5), 'all', or blank to cancel.")
+    try:
+        choice = input("Fetch > ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return
+    if not choice:
+        return
+
+    if choice.lower() == "all":
+        picked = [r["nameWithOwner"] for r in repos]
+    else:
+        picked = [repos[int(n) - 1]["nameWithOwner"]
+                  for n in choice.split() if n.isdigit() and 1 <= int(n) <= len(repos)]
+    if not picked:
+        print("Nothing selected.")
+        return
+
+    print()
+    sync_repos(picked)
+    print("\nFetched. Choose option 1 to re-index — repo content is not "
+          "searchable until you do.")
+
+
+def do_scaffold(usage: Usage) -> None:
+    """Draft project write-ups from the fetched repositories."""
+    from .scaffold import scaffold_all, DRAFTS_DIR
+
+    if not _key_is_set():
+        print("\nThis needs an API key. Put one in .env (see .env.example).")
+        return
+
+    print("\nDrafting a write-up per repository. Each costs about $0.01.")
+    try:
+        written, cost, todos = scaffold_all()
+    except RuntimeError as exc:
+        print(f"\n{exc}")
+        return
+
+    usage.cost += cost
+    usage.calls += len(written)
+    print(f"\n{len(written)} draft(s) in {DRAFTS_DIR}, {todos} questions to answer.")
+    print("Drafts are NOT indexed. Answer the TODOs, then move each finished "
+          "file into documents/ and re-index with option 1.")
+
+
 MENU = """
   1. Ingest documents      (chunk + embed everything in documents/ — free)
   2. Ask a question        (grounded answer with citations)
   3. Interview mode        (it asks, you answer, it grades you)
-  4. Refresh status
-  5. Quit
+  4. Sync GitHub repos     (pull READMEs, structure, commits — free)
+  5. Draft write-ups       (turn repos into write-ups you finish — ~$0.01 each)
+  6. Refresh status
+  7. Quit
 """
 
 
@@ -189,8 +258,12 @@ def main() -> None:
         elif choice == "3":
             do_interview(usage)
         elif choice == "4":
+            do_github()
+        elif choice == "5":
+            do_scaffold(usage)
+        elif choice == "6":
             show_status()
-        elif choice in {"5", "q", "quit", "exit"}:
+        elif choice in {"7", "q", "quit", "exit"}:
             if usage.calls:
                 print(f"\nThis session: {usage.summary()}")
             print("Good luck in the interview.\n")

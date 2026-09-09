@@ -32,6 +32,48 @@ from . import config
 
 
 # ---------------------------------------------------------------------------
+# Counting tokens
+# ---------------------------------------------------------------------------
+
+# Cached tokenizer. Loaded on first use so `import ingest` stays cheap.
+_tokenizer = None
+_tokenizer_failed = False
+
+
+def count_tokens(text: str) -> int:
+    """
+    Count word-pieces the way the embedding model actually will.
+
+    WHY NOT ESTIMATE FROM WORD COUNT: because the estimate breaks on exactly
+    the content that overflows. Prose is about 1.25 word-pieces per word, but
+    "data/sample_shopify_import.csv" is one word and eight tokens. A repository
+    file tree measured 60 words — comfortably inside a 160-word budget — while
+    being 952 word-pieces, almost four times what the model can read. It would
+    have been silently truncated to its first quarter.
+
+    Loading the tokenizer costs a couple of seconds once. Silent truncation
+    costs you an answer you never find out was wrong.
+    """
+    global _tokenizer, _tokenizer_failed
+
+    if _tokenizer is None and not _tokenizer_failed:
+        try:
+            from transformers import AutoTokenizer
+
+            _tokenizer = AutoTokenizer.from_pretrained(
+                f"sentence-transformers/{config.EMBEDDING_MODEL_NAME}"
+            )
+        except Exception:
+            # No network on a first run, or transformers unavailable. Fall back
+            # to the rough estimate rather than refusing to chunk at all.
+            _tokenizer_failed = True
+
+    if _tokenizer is not None:
+        return len(_tokenizer(text, add_special_tokens=True)["input_ids"])
+    return int(len(text.split()) * config.WORDS_TO_TOKENS_RATIO)
+
+
+# ---------------------------------------------------------------------------
 # The chunk
 # ---------------------------------------------------------------------------
 
@@ -45,10 +87,13 @@ class Chunk:
     section: str         # heading breadcrumb, e.g. "Trailhead > What went wrong"
     index: int           # position within its source document
     word_count: int = field(default=0)
+    token_count: int = field(default=0)
 
     def __post_init__(self) -> None:
         if not self.word_count:
             self.word_count = len(self.text.split())
+        if not self.token_count:
+            self.token_count = count_tokens(self.text)
 
     @property
     def citation(self) -> str:
@@ -83,8 +128,8 @@ class Chunk:
         return f"{' > '.join(levels)}\n\n{self.text}"
 
     def estimated_tokens(self) -> int:
-        """Rough word-piece count. Verified against the real tokenizer in step 3."""
-        return int(self.word_count * config.WORDS_TO_TOKENS_RATIO)
+        """Word-pieces in the text we actually embed, breadcrumb included."""
+        return count_tokens(self.embedding_text())
 
 
 # ---------------------------------------------------------------------------
@@ -257,32 +302,66 @@ def split_into_blocks(text: str) -> list[tuple[str, str]]:
 # ---------------------------------------------------------------------------
 
 
-def _split_oversized(paragraph: str, target_words: int) -> list[str]:
-    """
-    Break a single over-long paragraph on sentence boundaries.
-
-    Only reached when one paragraph exceeds the budget by itself. Sentence
-    boundaries are the least damaging place to cut once we have to cut.
-    """
-    pieces: list[str] = []
+def _pack_units(units: list[str], target_tokens: int, joiner: str = " ") -> list[str]:
+    """Greedily group small pieces of text up to the token budget."""
+    packed: list[str] = []
     current: list[str] = []
     count = 0
-
-    for sentence in split_sentences(paragraph):
-        words = len(sentence.split())
-        if current and count + words > target_words:
-            pieces.append(" ".join(current))
+    for unit in units:
+        tokens = count_tokens(unit)
+        if current and count + tokens > target_tokens:
+            packed.append(joiner.join(current))
             current, count = [], 0
-        current.append(sentence)
-        count += words
-
+        current.append(unit)
+        count += tokens
     if current:
-        pieces.append(" ".join(current))
+        packed.append(joiner.join(current))
+    return packed
+
+
+def _split_oversized(paragraph: str, target_tokens: int) -> list[str]:
+    """
+    Break a single over-long paragraph into pieces that fit the budget.
+
+    Three fallbacks, least damaging first:
+
+      1. sentence boundaries — the natural place to cut prose
+      2. line boundaries — for text with no sentence punctuation at all. A
+         fenced file tree or an ASCII diagram is one "sentence" as far as a
+         full-stop-based splitter is concerned, so without this a 129-file
+         repository tree becomes a single 952-word-piece chunk that the
+         embedding model silently truncates to its first 256.
+      3. a hard cut sized by measured tokens — the last resort, for a single
+         line longer than the whole budget (minified code, a long data URI).
+
+    Only reached when one paragraph busts the budget on its own.
+    """
+    pieces: list[str] = []
+
+    for piece in _pack_units(split_sentences(paragraph), target_tokens):
+        if count_tokens(piece) <= target_tokens:
+            pieces.append(piece)
+            continue
+
+        # Fallback 2: no usable sentence breaks — cut on newlines.
+        for line_group in _pack_units(piece.splitlines(), target_tokens, joiner="\n"):
+            if count_tokens(line_group) <= target_tokens:
+                pieces.append(line_group)
+                continue
+
+            # Fallback 3: one line is bigger than the budget by itself. Cut on
+            # words, sized by measuring rather than assuming a ratio.
+            words = line_group.split()
+            step = max(1, len(words) * target_tokens // max(count_tokens(line_group), 1))
+            pieces.extend(
+                " ".join(words[i : i + step]) for i in range(0, len(words), step)
+            )
+
     return pieces or [paragraph]
 
 
 def _merge_orphans(
-    chunks: list[Chunk], target_words: int, min_words: int
+    chunks: list[Chunk], target_tokens: int, min_tokens: int
 ) -> list[Chunk]:
     """
     Fold undersized chunks into a neighbour.
@@ -306,10 +385,10 @@ def _merge_orphans(
         prev = merged[-1] if merged else None
         can_merge_back = (
             prev is not None
-            and (prev.word_count < min_words or chunk.word_count < min_words)
+            and (prev.token_count < min_tokens or chunk.token_count < min_tokens)
             and prev.source == chunk.source
             and prev.section == chunk.section
-            and prev.word_count + chunk.word_count <= target_words
+            and prev.token_count + chunk.token_count <= target_tokens
         )
         if can_merge_back:
             merged[-1] = Chunk(
@@ -331,8 +410,8 @@ def _merge_orphans(
 def pack_blocks_into_chunks(
     blocks: list[tuple[str, str]],
     source: str,
-    target_words: int | None = None,
-    min_words: int | None = None,
+    target_tokens: int | None = None,
+    min_tokens: int | None = None,
     overlap_sentences: int | None = None,
 ) -> list[Chunk]:
     """
@@ -347,18 +426,18 @@ def pack_blocks_into_chunks(
     on it would be wrong for half its content — and Step 5 shows that label to
     you as the source of the answer.
     """
-    target_words = target_words or config.CHUNK_TARGET_WORDS
-    min_words = min_words or config.CHUNK_MIN_WORDS
+    target_tokens = target_tokens or config.CHUNK_TARGET_TOKENS
+    min_tokens = min_tokens or config.CHUNK_MIN_TOKENS
     if overlap_sentences is None:
         overlap_sentences = config.CHUNK_OVERLAP_SENTENCES
 
     chunks: list[Chunk] = []
     buffer: list[str] = []
-    buffer_words = 0
+    buffer_tokens = 0
     buffer_section = ""
 
     def flush() -> None:
-        nonlocal buffer, buffer_words
+        nonlocal buffer, buffer_tokens
         if not buffer:
             return
         text = "\n\n".join(buffer).strip()
@@ -366,7 +445,7 @@ def pack_blocks_into_chunks(
             chunks.append(
                 Chunk(text=text, source=source, section=buffer_section, index=len(chunks))
             )
-        buffer, buffer_words = [], 0
+        buffer, buffer_tokens = [], 0
 
     def overlap_tail() -> list[str]:
         """Last N sentences of the chunk just emitted, to seed the next one."""
@@ -381,13 +460,13 @@ def pack_blocks_into_chunks(
             flush()
             buffer_section = section
 
-        words = len(paragraph.split())
+        tokens = count_tokens(paragraph)
 
         # Case 1: this paragraph alone busts the budget. Emit what we have,
-        # then sentence-split the paragraph into its own chunks.
-        if words > target_words:
+        # then split the paragraph into its own chunks.
+        if tokens > target_tokens:
             flush()
-            for piece in _split_oversized(paragraph, target_words):
+            for piece in _split_oversized(paragraph, target_tokens):
                 chunks.append(
                     Chunk(
                         text=piece,
@@ -400,23 +479,23 @@ def pack_blocks_into_chunks(
 
         # Case 2: adding this paragraph would bust the budget — close the
         # current chunk first, then start a new one seeded with the overlap.
-        if buffer and buffer_words + words > target_words:
+        if buffer and buffer_tokens + tokens > target_tokens:
             flush()
             tail = overlap_tail()
             if tail:
                 buffer.append(" ".join(tail))
-                buffer_words = sum(len(s.split()) for s in tail)
+                buffer_tokens = count_tokens(" ".join(tail))
 
         buffer.append(paragraph)
-        buffer_words += words
+        buffer_tokens += tokens
 
         # Case 3: comfortably over the minimum and near the budget — emit now
         # rather than letting the next paragraph force an awkward split.
-        if buffer_words >= target_words - min_words:
+        if buffer_tokens >= target_tokens - min_tokens:
             flush()
 
     flush()
-    return _merge_orphans(chunks, target_words, min_words)
+    return _merge_orphans(chunks, target_tokens, min_tokens)
 
 
 # ---------------------------------------------------------------------------
@@ -471,14 +550,13 @@ def main() -> None:
             if len(preview) > 220:
                 preview = preview[:220] + "…"
             print(f"\n  [{chunk.index}] {chunk.section or '(no heading)'}")
-            print(f"      {chunk.word_count} words ≈ {chunk.estimated_tokens()} tokens{over}")
+            print(f"      {chunk.word_count} words, {chunk.estimated_tokens()} tokens{over}")
             print(f"      {preview}")
 
     print(f"\n{'=' * 78}")
     print(f"{grand_total} chunks from {len(paths)} document(s), {total_words} words total.")
-    print(f"Budget: {config.CHUNK_TARGET_WORDS} words/chunk "
-          f"(≈{int(config.CHUNK_TARGET_WORDS * config.WORDS_TO_TOKENS_RATIO)} "
-          f"of the model's {config.EMBEDDING_MAX_TOKENS} token limit).")
+    print(f"Budget: {config.CHUNK_TARGET_TOKENS} tokens/chunk of the model's "
+          f"{config.EMBEDDING_MAX_TOKENS} limit, measured with its real tokenizer.")
     print("Cost of this step: $0.00 — nothing here calls an API.")
 
 

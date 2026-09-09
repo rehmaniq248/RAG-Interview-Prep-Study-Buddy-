@@ -125,6 +125,40 @@ To see the assembled prompt and a cost estimate **without spending anything**:
 python -m rag_buddy.generate "your question" --dry-run
 ```
 
+## Pulling in your GitHub repos
+
+A resume bullet is one line. Your repositories hold far more — and the tool
+can use both.
+
+```bash
+python -m rag_buddy.github --list                    # see your repos
+python -m rag_buddy.github owner/repo-one owner/two  # pull them in
+python -m rag_buddy.store                            # re-index
+```
+
+This indexes each repo's **README, file structure, dependencies, and commit
+history** — not source files. That is deliberate: interview questions ask
+*why*, and code only records *what*. A chunk of your migration script cannot
+say why you merged colour variants the way you did, and indexing thousands of
+such chunks would bury the ones that can.
+
+### Turning repos into write-ups
+
+Repo facts make the tool broader, not deeper — the reasoning interviewers ask
+about isn't written anywhere. So this drafts a write-up per project, filling in
+everything the repo evidences and leaving the rest as pointed questions for you:
+
+```bash
+python -m rag_buddy.scaffold
+```
+
+> **TODO:** The README notes this is "a clean reconstruction" of the original
+> migration. What broke or was lost in the original run that prompted the rebuild?
+
+Answer the TODOs, then move the file into `documents/` and re-index. Drafts are
+**not** indexed until you move them — an unedited draft is half open questions,
+and indexing it would treat those as facts about your career.
+
 ## Interview mode
 
 Instead of you asking questions, the tool asks *you* — generating interview
@@ -154,6 +188,9 @@ Type `skip` to pass on a question, `quit` to end the session.
 | Answering a question | Claude Haiku 4.5 | ~$0.0013 |
 | Generating interview questions | Claude Haiku 4.5 | ~$0.002 per round of 5 |
 | Grading one answer | Claude Sonnet 5 | ~$0.010 |
+| Pulling GitHub repos | GitHub API | Free |
+| Drafting one write-up | Claude Haiku 4.5 | ~$0.009 |
+| Question your docs can't answer | *no API call* | $0.00 |
 
 Only the last three rows cost money. Retrieved context is deliberately kept to
 a handful of chunks rather than whole documents, which is what keeps questions
@@ -183,7 +220,10 @@ rag-study-buddy/
 │   ├── retrieve.py     finds the top-k chunks for a question
 │   ├── generate.py     asks Claude Haiku to answer from those chunks
 │   ├── interview.py    generates questions and grades your answers
+│   ├── github.py       pulls README / structure / commits from your repos
+│   ├── scaffold.py     drafts project write-ups you finish
 │   └── cli.py          the menu tying it together
+├── drafts/             generated write-ups awaiting your answers (gitignored)
 ├── chroma_db/          local vector store (generated, gitignored)
 ├── requirements.txt
 └── .env.example

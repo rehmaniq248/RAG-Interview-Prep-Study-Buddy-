@@ -114,9 +114,10 @@ class Answer:
     def __init__(self, text: str, hits: list[RetrievedChunk], usage, model: str):
         self.text = text
         self.hits = hits
-        self.input_tokens = usage.input_tokens
-        self.output_tokens = usage.output_tokens
-        self.model = model
+        # usage is None when we answered without calling the API at all.
+        self.input_tokens = usage.input_tokens if usage else 0
+        self.output_tokens = usage.output_tokens if usage else 0
+        self.model = model if usage else "(no API call)"
 
     @property
     def cost(self) -> float:
@@ -161,6 +162,28 @@ def answer_question(
     """
     model = model or config.GENERATION_MODEL
     hits = retrieve(question, top_k=top_k)
+
+    # If the reranker says nothing here is relevant, answer for free.
+    #
+    # The model would reach the same conclusion — step 5's prompt already makes
+    # it decline when the context does not support an answer — but it would
+    # charge us to read four irrelevant passages first. This is the reranker's
+    # own confidence, calibrated in config, spent nowhere.
+    scored = [h.rerank_score for h in hits if h.rerank_score is not None]
+    if scored and config.RERANK_MIN_SCORE is not None:
+        if max(scored) < config.RERANK_MIN_SCORE:
+            return Answer(
+                text=(
+                    "Your documents don't appear to cover this.\n\n"
+                    "Nothing retrieved was a close enough match to answer from, so "
+                    "rather than guess, this is worth noting as a gap: if the topic "
+                    "matters for your interviews, write it up and re-ingest."
+                ),
+                hits=hits,
+                usage=None,
+                model=model,
+            )
+
     client = client or get_client()
 
     try:

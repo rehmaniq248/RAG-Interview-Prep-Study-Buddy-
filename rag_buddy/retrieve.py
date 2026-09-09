@@ -33,6 +33,7 @@ class RetrievedChunk:
     citation: str
     distance: float
     rank: int
+    rerank_score: float | None = None
 
     @property
     def similarity(self) -> float:
@@ -53,10 +54,65 @@ class RetrievedChunk:
         return 1.0 - self.distance
 
 
+_reranker = None
+
+
+def get_reranker():
+    """
+    Load the cross-encoder, once per process.
+
+    Imported lazily for the same reason as the embedding model: it costs a
+    couple of seconds and a ~80 MB download the first time, and only the
+    retrieval path needs it.
+    """
+    global _reranker
+    if _reranker is None:
+        from sentence_transformers import CrossEncoder
+
+        _reranker = CrossEncoder(config.RERANK_MODEL)
+    return _reranker
+
+
+def _apply_diversity_cap(hits: list[RetrievedChunk], max_per_source: int,
+                         limit: int) -> list[RetrievedChunk]:
+    """
+    Take the best `limit` hits, allowing at most `max_per_source` per document.
+
+    Hits must already be in rank order. Anything skipped by the cap is held
+    back and used to fill remaining slots if we run out of diverse candidates —
+    returning fewer chunks than asked for would be a worse outcome than a
+    slightly lopsided context.
+    """
+    chosen: list[RetrievedChunk] = []
+    overflow: list[RetrievedChunk] = []
+    seen: dict[str, int] = {}
+
+    for hit in hits:
+        if len(chosen) >= limit:
+            break
+        if seen.get(hit.source, 0) < max_per_source:
+            seen[hit.source] = seen.get(hit.source, 0) + 1
+            chosen.append(hit)
+        else:
+            overflow.append(hit)
+
+    for hit in overflow:
+        if len(chosen) >= limit:
+            break
+        chosen.append(hit)
+
+    for i, hit in enumerate(chosen, start=1):
+        hit.rank = i
+    return chosen
+
+
 def retrieve(
     query: str,
     top_k: int | None = None,
     min_similarity: float | None = None,
+    rerank: bool | None = None,
+    max_per_source: int | None = None,
+    source: str | None = None,
 ) -> list[RetrievedChunk]:
     """
     Embed the question and return the top-k nearest chunks.
@@ -81,6 +137,8 @@ def retrieve(
     not so you can guess at it now.
     """
     top_k = top_k or config.TOP_K
+    rerank = config.RERANK_ENABLED if rerank is None else rerank
+    max_per_source = max_per_source or config.MAX_CHUNKS_PER_SOURCE
     collection = get_collection()
 
     if collection.count() == 0:
@@ -95,11 +153,15 @@ def retrieve(
     # why the model name lives in config.py and is never passed in by a caller.
     query_vector = embed_texts([query], show_progress=False)
 
+    # With reranking on, cast a wider net first: vector search only has to get
+    # the right chunk into the candidate pool, not to the top of it.
+    wanted = config.RERANK_CANDIDATES if rerank else top_k
     results = collection.query(
         query_embeddings=query_vector,
         # Never ask for more rows than exist, or Chroma pads the result.
-        n_results=min(top_k, collection.count()),
+        n_results=min(wanted, collection.count()),
         include=["documents", "metadatas", "distances"],
+        **({"where": {"source": source}} if source else {}),
     )
 
     # Chroma returns a list-per-query; we only ever send one query.
@@ -120,7 +182,16 @@ def retrieve(
             continue
         hits.append(chunk)
 
-    return hits
+    if rerank and len(hits) > 1:
+        # The cross-encoder reads (question, passage) together and scores how
+        # well the passage answers the question — a different and much better
+        # judgement than the cosine distance between two independent vectors.
+        scores = get_reranker().predict([(query, hit.text) for hit in hits])
+        for hit, score in zip(hits, scores):
+            hit.rerank_score = float(score)
+        hits.sort(key=lambda h: h.rerank_score, reverse=True)
+
+    return _apply_diversity_cap(hits, max_per_source, top_k)
 
 
 def estimate_context_tokens(hits: list[RetrievedChunk]) -> int:
@@ -161,7 +232,8 @@ def main() -> None:
     print(f"Top {len(hits)} of {get_collection().count()} chunks\n")
 
     for hit in hits:
-        print(f"  [{hit.rank}] similarity {hit.similarity:.3f}  —  {hit.citation}")
+        score = (f"rerank {hit.rerank_score:+.2f}, " if hit.rerank_score is not None else "")
+        print(f"  [{hit.rank}] {score}similarity {hit.similarity:.3f}  —  {hit.citation}")
         text = " ".join(hit.text.split())
         print(f"      {text[:300]}{'…' if len(text) > 300 else ''}\n")
 

@@ -51,8 +51,16 @@ EMBEDDING_MAX_TOKENS = 256
 # deliberate safety margin below EMBEDDING_MAX_TOKENS: 180 words ≈ 234
 # word-pieces. Step 3 verifies this against the real tokenizer and warns if
 # any chunk would actually be truncated.
-# Measured against the real tokenizer on sample prose: 1.25 word-pieces per
-# word. We budget at 1.3 to stay conservative.
+# Fallback only. The chunker uses the embedding model's REAL tokenizer when it
+# can load it; this ratio is used only if that fails.
+#
+# It is a fallback rather than the default because it is wrong in exactly the
+# case that hurts most. Prose runs ~1.25 word-pieces per word, but a file path
+# like "data/sample_shopify_import.csv" is one word and about eight tokens. A
+# 60-line repository tree measured 60 "words" — well inside a 160-word budget —
+# while actually being 952 word-pieces, nearly four times the model's limit.
+# Estimating token counts from word counts silently breaks on any structured
+# text: paths, code, tables, URLs.
 WORDS_TO_TOKENS_RATIO = 1.3
 
 # The heading breadcrumb is embedded ALONGSIDE the body text, so it eats into
@@ -62,13 +70,14 @@ WORDS_TO_TOKENS_RATIO = 1.3
 # silent truncation.
 HEADING_TOKEN_RESERVE = 40
 
-# Body budget: (256 - 40 reserved) / 1.3 ≈ 166 words. Rounded down.
-CHUNK_TARGET_WORDS = 160
+# Body budget in TOKENS: 256 limit - 40 reserved for the heading breadcrumb,
+# minus a small margin.
+CHUNK_TARGET_TOKENS = 200
 
 # Chunks shorter than this are weak retrieval units — a lone sentence rarely
 # carries enough context to answer anything — so we pack neighbouring
 # paragraphs together until we clear this floor.
-CHUNK_MIN_WORDS = 40
+CHUNK_MIN_TOKENS = 50
 
 # Carry the last N sentences of each chunk into the start of the next one.
 # This is "overlap": it stops an idea that straddles a chunk boundary from
@@ -129,6 +138,49 @@ EVALUATION_MODEL = "claude-sonnet-5"
 # cost control in the whole project: each extra chunk is extra input tokens on
 # every single question you ask.
 TOP_K = 4
+
+# --- Reranking --------------------------------------------------------------
+# Vector search is fast but coarse: it compares two vectors that were computed
+# independently, so it can only measure "are these about the same topic",
+# never "does this passage answer this question". A cross-encoder reads the
+# question and the passage TOGETHER and scores the pair directly. Far more
+# accurate, far too slow to run over a whole corpus — which is exactly why it
+# goes second: vector search cheaply narrows 89 chunks to 20, the cross-encoder
+# carefully picks the best few from those.
+#
+# Runs locally on CPU. Free, like everything before the generation step.
+RERANK_ENABLED = True
+RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+# How many candidates vector search hands the reranker. Larger casts a wider
+# net at some CPU cost; the API cost is unchanged either way, because only
+# TOP_K chunks are ever sent to Claude.
+RERANK_CANDIDATES = 20
+
+# At most this many chunks from any one document in the final results.
+#
+# WHY: the same project now appears in up to three places — a resume bullet, a
+# generated repo document, and a write-up. Without a cap, one project's
+# near-duplicate chunks can take every slot, so a question that touches two
+# projects only ever sees one. The cap forces the context to spread.
+MAX_CHUNKS_PER_SOURCE = 2
+
+# Below this cross-encoder score, treat the corpus as having no real answer and
+# say so WITHOUT calling the API.
+#
+# Step 4 warned against thresholding cosine similarity, and that warning still
+# stands: those scores are relative and shift with phrasing, so a cutoff picked
+# by intuition rejects correct answers. Cross-encoder scores are different in
+# kind — the model reads question and passage together and judges relevance
+# directly, so the number means something on its own. Measured on this corpus:
+#
+#   answerable    -4.9 -4.5 -1.7 -1.3 +1.2 +2.4 +3.1 +3.7 +6.0 +6.8
+#   unanswerable  -11.3 -11.2 -11.1 -11.0 -9.2
+#
+# A 4.3-point gap, so -7.0 sits comfortably between with headroom either side.
+# Re-check it against your own documents if answers start being refused: the
+# CLI prints these scores. Set to None to disable and always call the API.
+RERANK_MIN_SCORE = -7.0
 
 # --- Interview mode (step 6) -----------------------------------------------
 # How many questions to generate per round.

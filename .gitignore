@@ -11,6 +11,10 @@ documents/*
 # pattern would silently match nothing.
 chroma_db/
 
+# Generated write-up drafts. They fill up with your own answers about your
+# projects, so they stay local like everything else you author.
+drafts/
+
 # --- Secrets ---------------------------------------------------------------
 .env
 
