@@ -89,6 +89,21 @@ modes. If the right passage isn't in the list, the problem is retrieval or
 chunking and no amount of prompting will fix it. If the right passage *is*
 there and the answer was still poor, the problem is in generation.
 
+## Asking a question
+
+```bash
+python -m rag_buddy.generate "why did I choose that database"
+```
+
+Prints the answer with `[n]` citations, the sources those numbers refer to,
+and the exact token count and dollar cost of the request.
+
+To see the assembled prompt and a cost estimate **without spending anything**:
+
+```bash
+python -m rag_buddy.generate "your question" --dry-run
+```
+
 ## Cost
 
 | Step | Runs where | Cost |
@@ -117,7 +132,8 @@ rag-study-buddy/
 │   ├── config.py       paths, model names, and tuning knobs
 │   ├── ingest.py       reads documents/ and splits them into chunks
 │   ├── store.py        embeds chunks locally and stores them in ChromaDB
-│   └── retrieve.py     finds the top-k chunks for a question
+│   ├── retrieve.py     finds the top-k chunks for a question
+│   └── generate.py     asks Claude Haiku to answer from those chunks
 ├── chroma_db/          local vector store (generated, gitignored)
 ├── requirements.txt
 └── .env.example
@@ -131,6 +147,6 @@ Built step by step. Currently complete:
 - [x] 2. Ingestion + chunking
 - [x] 3. Local embedding + ChromaDB storage
 - [x] 4. Retrieval
-- [ ] 5. Grounded answer generation with citations
+- [x] 5. Grounded answer generation with citations
 - [ ] 6. Interview mode
 - [ ] 7. CLI menu

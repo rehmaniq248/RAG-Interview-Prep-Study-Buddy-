@@ -118,6 +118,25 @@ TOP_K = 4
 # token spend per question.
 MAX_OUTPUT_TOKENS = 1024
 
+# Published per-million-token prices, used to show you the real cost of every
+# question. Update these if Anthropic's pricing changes — they are display
+# only and do not affect any request.
+MODEL_PRICING = {
+    # model id            (input $/1M, output $/1M)
+    "claude-haiku-4-5":   (1.00, 5.00),
+    "claude-sonnet-5":    (2.00, 10.00),
+    "claude-opus-5":      (5.00, 25.00),
+}
+
+
+def price_of(model: str, input_tokens: int, output_tokens: int) -> float:
+    """Dollar cost of one request. Returns 0.0 for a model we have no price for."""
+    rates = MODEL_PRICING.get(model)
+    if not rates:
+        return 0.0
+    in_rate, out_rate = rates
+    return (input_tokens * in_rate + output_tokens * out_rate) / 1_000_000
+
 
 def get_api_key() -> str:
     """
