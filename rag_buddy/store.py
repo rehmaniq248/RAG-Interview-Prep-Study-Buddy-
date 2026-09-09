@@ -245,6 +245,24 @@ def collection_stats() -> dict:
     return {"exists": True, "count": count, "sources": sources}
 
 
+def get_chunks_by_source(source: str) -> list[dict]:
+    """
+    Every stored chunk from one document, in the order it appears in the file.
+
+    Used by interview mode, which builds questions from a document's own
+    content rather than from a search — you are not asking it anything, so
+    there is no query to embed.
+    """
+    collection = get_collection()
+    rows = collection.get(where={"source": source}, include=["documents", "metadatas"])
+    chunks = [
+        {"id": cid, "text": doc, "metadata": meta}
+        for cid, doc, meta in zip(rows["ids"], rows["documents"], rows["metadatas"])
+    ]
+    # Chroma does not promise ordering; chunk_id is "source::index".
+    return sorted(chunks, key=lambda c: int(c["id"].rsplit("::", 1)[1]))
+
+
 # ---------------------------------------------------------------------------
 # `python -m rag_buddy.store`
 # ---------------------------------------------------------------------------

@@ -104,15 +104,42 @@ GENERATION_MODEL = "claude-haiku-4-5"
 # write-up actually says. That is a far harder judgement call than answering a
 # question from supplied text, and a weak grader is a generous grader — it
 # will tell you an answer was fine when you left out the tradeoff you actually
-# made. This knob exists so you can measure that rather than guess: leave it on
-# Haiku, and if grading feels soft, point it at "claude-sonnet-5" ($2.00 per
-# 1M input / $10.00 per 1M output) for evaluation only, while Q&A stays cheap.
-EVALUATION_MODEL = GENERATION_MODEL
+# made. So we measured it, on three answers to the same question:
+#
+#                     Haiku 4.5    Sonnet 5     correct
+#   vague answer      WEAK         WEAK         both
+#   wrong numbers     WEAK         WEAK         both
+#   strong answer     ADEQUATE     STRONG       Sonnet
+#
+# Haiku compresses the top of the scale: it could not tell a good answer from a
+# mediocre one, and invented faults to justify the gap — including penalising a
+# true detail the notes happened not to contain, after being told explicitly not
+# to. A grader that calls a strong answer "adequate" trains you to over-explain
+# and stops being believed.
+#
+# So grading alone uses Sonnet 5. Q&A and question generation stay on Haiku.
+# Measured cost: ~$0.010 per graded answer vs ~$0.003 on Haiku — about 3x, on
+# the one call in the project where judgement is the whole product. A ten
+# question session costs roughly $0.10.
+#
+# To revert, set this back to GENERATION_MODEL.
+EVALUATION_MODEL = "claude-sonnet-5"
 
 # How many chunks we feed the model as context. Keeping this small is the main
 # cost control in the whole project: each extra chunk is extra input tokens on
 # every single question you ask.
 TOP_K = 4
+
+# --- Interview mode (step 6) -----------------------------------------------
+# How many questions to generate per round.
+QUESTIONS_PER_ROUND = 5
+
+# How many of a document's chunks to use as the raw material for those
+# questions. This is a cost ceiling: a long resume could be fifty chunks, and
+# sending all of them would make a single question-generation call cost more
+# than a hundred ordinary questions. Six chunks gives the model enough material
+# to ask something substantive without paying for the whole document.
+MAX_QUESTION_SOURCE_CHUNKS = 6
 
 # Hard ceiling on the answer length, which caps the (more expensive) output
 # token spend per question.

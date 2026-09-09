@@ -104,6 +104,25 @@ To see the assembled prompt and a cost estimate **without spending anything**:
 python -m rag_buddy.generate "your question" --dry-run
 ```
 
+## Interview mode
+
+Instead of you asking questions, the tool asks *you* — generating interview
+questions from your own write-ups, then grading your typed answer against what
+your notes actually say.
+
+```bash
+python -m rag_buddy.interview                       # random document
+python -m rag_buddy.interview project_trailhead.md  # a specific one
+```
+
+Each answer gets a verdict (STRONG / ADEQUATE / WEAK) plus what you covered,
+what you left out, anything that **contradicts** your notes, and one sharper
+sentence you could have said. Things you say that aren't in your notes are
+flagged as unverifiable rather than wrong — you may know more than you wrote
+down, and that's a prompt to go write it down.
+
+Type `skip` to pass on a question, `quit` to end the session.
+
 ## Cost
 
 | Step | Runs where | Cost |
@@ -111,11 +130,18 @@ python -m rag_buddy.generate "your question" --dry-run
 | Chunking documents | Your machine | Free |
 | Embedding chunks | Your machine (`all-MiniLM-L6-v2`) | Free |
 | Storing / searching vectors | Your machine (ChromaDB) | Free |
-| Generating an answer | Anthropic API (Claude Haiku 4.5) | Fractions of a cent per question |
+| Answering a question | Claude Haiku 4.5 | ~$0.0013 |
+| Generating interview questions | Claude Haiku 4.5 | ~$0.002 per round of 5 |
+| Grading one answer | Claude Sonnet 5 | ~$0.010 |
 
-Only the last row costs money. The retrieved context is deliberately kept to a
-handful of chunks rather than whole documents, which is what keeps each
-question cheap.
+Only the last three rows cost money. Retrieved context is deliberately kept to
+a handful of chunks rather than whole documents, which is what keeps questions
+cheap — roughly 770 questions per dollar.
+
+Grading is the one place that doesn't use Haiku. It was measured: Haiku graded
+a strong answer as merely "adequate" and manufactured faults to justify it,
+while Sonnet 5 graded the same answer correctly. A grader you can't trust is
+worse than none. See `EVALUATION_MODEL` in `config.py` — one line to revert.
 
 ## Privacy
 
@@ -133,7 +159,8 @@ rag-study-buddy/
 │   ├── ingest.py       reads documents/ and splits them into chunks
 │   ├── store.py        embeds chunks locally and stores them in ChromaDB
 │   ├── retrieve.py     finds the top-k chunks for a question
-│   └── generate.py     asks Claude Haiku to answer from those chunks
+│   ├── generate.py     asks Claude Haiku to answer from those chunks
+│   └── interview.py    generates questions and grades your answers
 ├── chroma_db/          local vector store (generated, gitignored)
 ├── requirements.txt
 └── .env.example
@@ -148,5 +175,5 @@ Built step by step. Currently complete:
 - [x] 3. Local embedding + ChromaDB storage
 - [x] 4. Retrieval
 - [x] 5. Grounded answer generation with citations
-- [ ] 6. Interview mode
+- [x] 6. Interview mode
 - [ ] 7. CLI menu
