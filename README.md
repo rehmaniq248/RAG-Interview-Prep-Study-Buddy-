@@ -76,6 +76,19 @@ stale text survives.
 It also verifies every chunk against the model's real tokenizer and warns you
 if any would be silently truncated.
 
+## Inspecting retrieval
+
+See which chunks a question pulls up, without generating an answer:
+
+```bash
+python -m rag_buddy.retrieve "why did I choose that database"
+```
+
+Use this whenever an answer disappoints you — it separates the two failure
+modes. If the right passage isn't in the list, the problem is retrieval or
+chunking and no amount of prompting will fix it. If the right passage *is*
+there and the answer was still poor, the problem is in generation.
+
 ## Cost
 
 | Step | Runs where | Cost |
@@ -103,7 +116,8 @@ rag-study-buddy/
 ├── rag_buddy/          the package
 │   ├── config.py       paths, model names, and tuning knobs
 │   ├── ingest.py       reads documents/ and splits them into chunks
-│   └── store.py        embeds chunks locally and stores them in ChromaDB
+│   ├── store.py        embeds chunks locally and stores them in ChromaDB
+│   └── retrieve.py     finds the top-k chunks for a question
 ├── chroma_db/          local vector store (generated, gitignored)
 ├── requirements.txt
 └── .env.example
@@ -116,7 +130,7 @@ Built step by step. Currently complete:
 - [x] 1. Project setup
 - [x] 2. Ingestion + chunking
 - [x] 3. Local embedding + ChromaDB storage
-- [ ] 4. Retrieval
+- [x] 4. Retrieval
 - [ ] 5. Grounded answer generation with citations
 - [ ] 6. Interview mode
 - [ ] 7. CLI menu
