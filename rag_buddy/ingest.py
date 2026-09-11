@@ -319,6 +319,24 @@ def _pack_units(units: list[str], target_tokens: int, joiner: str = " ") -> list
     return packed
 
 
+def _halve_until_fits(words: list[str], target_tokens: int) -> list[str]:
+    """
+    Split a run of words in half until every piece fits the budget.
+
+    The proportional cut below assumes tokens grow in step with words, but every
+    tokenizer call also adds fixed special tokens ([CLS] and [SEP]), so a piece
+    sized to exactly the budget lands a token or two over. Halving whatever still
+    overflows guarantees the budget without a tokenizer call per word. A single
+    word longer than the whole budget cannot be split and is returned as is.
+    """
+    text = " ".join(words)
+    if len(words) <= 1 or count_tokens(text) <= target_tokens:
+        return [text]
+    middle = len(words) // 2
+    return (_halve_until_fits(words[:middle], target_tokens)
+            + _halve_until_fits(words[middle:], target_tokens))
+
+
 def _split_oversized(paragraph: str, target_tokens: int) -> list[str]:
     """
     Break a single over-long paragraph into pieces that fit the budget.
@@ -353,9 +371,8 @@ def _split_oversized(paragraph: str, target_tokens: int) -> list[str]:
             # words, sized by measuring rather than assuming a ratio.
             words = line_group.split()
             step = max(1, len(words) * target_tokens // max(count_tokens(line_group), 1))
-            pieces.extend(
-                " ".join(words[i : i + step]) for i in range(0, len(words), step)
-            )
+            for i in range(0, len(words), step):
+                pieces.extend(_halve_until_fits(words[i : i + step], target_tokens))
 
     return pieces or [paragraph]
 
@@ -481,10 +498,16 @@ def pack_blocks_into_chunks(
         # current chunk first, then start a new one seeded with the overlap.
         if buffer and buffer_tokens + tokens > target_tokens:
             flush()
-            tail = overlap_tail()
-            if tail:
-                buffer.append(" ".join(tail))
-                buffer_tokens = count_tokens(" ".join(tail))
+            tail_text = " ".join(overlap_tail())
+            tail_tokens = count_tokens(tail_text) if tail_text else 0
+            # Carry the overlap only if the chunk still fits with it. A long
+            # final sentence plus a near-budget paragraph would otherwise push
+            # the chunk past the limit — and past the embedding window, where
+            # the excess is silently truncated. Dropping one sentence of overlap
+            # is a far smaller loss than truncating the paragraph it precedes.
+            if tail_text and tail_tokens + tokens <= target_tokens:
+                buffer.append(tail_text)
+                buffer_tokens = tail_tokens
 
         buffer.append(paragraph)
         buffer_tokens += tokens

@@ -218,6 +218,43 @@ a strong answer as merely "adequate" and manufactured faults to justify it,
 while Sonnet 5 graded the same answer correctly. A grader you can't trust is
 worse than none. See `EVALUATION_MODEL` in `config.py` — one line to revert.
 
+## Running the tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The suite runs in under a second and needs no API key, no network, and no
+model downloads.
+
+It is also safe to run on a machine with real data in it. A shared fixture
+redirects `documents/`, `drafts/` and `chroma_db/` into a temporary folder for
+every test, and replaces the Anthropic client, the GitHub CLI, ChromaDB and
+both local models with blockers that fail the test if anything reaches them.
+Running the tests can never spend money or touch your documents, drafts or
+index.
+
+What it covers:
+
+- **Chunking** — token budgets, all three split fallbacks, overlap, heading
+  boundaries, orphan merging, and rejecting binary files renamed to `.md`
+- **The TODO editor** — answer placement, atomic saves and backups, resuming
+  a session, and refusing to promote a draft with open questions
+- **Retrieval** — candidate fetch, reranking order, the per-source diversity cap
+- **Generation** — prompt assembly, answering unanswerable questions without
+  an API call, and turning API errors into readable messages
+- **Interview mode** — question parsing, grading model and pricing, sampling
+- **GitHub and scaffolding** — document structure, truncation, and drafts
+  never overwriting your answers
+
+Several tests are regression tests for real bugs the suite caught: a chunk
+overflowing its budget when overlap was carried over, the last-resort word
+split overshooting by the tokenizer's special tokens, and indented interview
+questions keeping their `Q:` prefix.
+
+Slower integration tests against the real models are marked `model`.
+
 ## Privacy
 
 Your documents never leave your machine except for the few retrieved chunks
@@ -243,7 +280,9 @@ rag-study-buddy/
 │   └── cli.py          the menu tying it together
 ├── drafts/             generated write-ups awaiting your answers (gitignored)
 ├── chroma_db/          local vector store (generated, gitignored)
+├── tests/              the test suite (pytest)
 ├── requirements.txt
+├── requirements-dev.txt   adds pytest
 └── .env.example
 ```
 

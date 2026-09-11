@@ -247,9 +247,12 @@ def generate_questions(
         usage.add(response, config.GENERATION_MODEL)
 
     text = "".join(b.text for b in response.content if b.type == "text")
-    # Tolerate the model prefixing "Q:" inconsistently rather than failing hard.
+    # Tolerate the model formatting "Q:" lines inconsistently. Strip BEFORE
+    # removing the prefix: models sometimes indent the list, and "  Q: Why?"
+    # does not start with "Q:" until the leading whitespace is gone — which
+    # left the prefix inside the question text.
     questions = [
-        line.removeprefix("Q:").strip()
+        line.strip().removeprefix("Q:").strip()
         for line in text.splitlines()
         if line.strip().startswith("Q:")
     ]
