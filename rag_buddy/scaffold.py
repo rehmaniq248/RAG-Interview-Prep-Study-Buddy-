@@ -105,8 +105,11 @@ DRAFT — generated from your repository, then left for you to finish.
 Everything not marked TODO is evidenced by the repo. Every **TODO:** is a
 question only you can answer; that is where the interview value is.
 
-When you have answered them, delete this header and the remaining TODO lines,
-then move this file into documents/ and re-ingest:
+Easiest: answer them one at a time, and it moves the file for you when done:
+
+    python -m rag_buddy.todos drafts/{filename}
+
+Or by hand: delete this header and the TODO lines, then move and re-ingest:
 
     mv drafts/{filename} documents/
     python -m rag_buddy.store
@@ -164,8 +167,7 @@ def main() -> None:
     print(f"\n{len(written)} draft(s) in {DRAFTS_DIR}")
     print(f"{todos} questions waiting for you across them.")
     print(f"Cost: ${cost:.4f}")
-    print("\nAnswer the TODOs, then move each finished draft into documents/ "
-          "and re-run `python -m rag_buddy.store`.")
+    print("\nAnswer them one at a time with:  python -m rag_buddy.todos")
     print("Drafts are NOT indexed until you move them.")
 
 

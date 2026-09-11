@@ -37,7 +37,7 @@ from dataclasses import dataclass
 import chromadb
 
 from . import config
-from .ingest import Chunk, load_and_chunk_all
+from .ingest import Chunk, find_unfinished_drafts, load_and_chunk_all
 
 # The model is heavy to construct (~90 MB of weights) but reusable, so we load
 # it once per process and hold it here rather than rebuilding it per call.
@@ -182,11 +182,13 @@ def build_index(rebuild: bool = True) -> dict:
     is exactly the kind of ghost that makes a RAG tool quietly cite something
     you rewrote a week ago.
     """
-    chunks = load_and_chunk_all()
+    skipped: list[tuple[str, str]] = []
+    chunks = load_and_chunk_all(skipped=skipped)
     if not chunks:
+        detail = "".join(f"\n  skipped {name}: {why}" for name, why in skipped)
         raise RuntimeError(
             f"No chunks produced — is {config.DOCUMENTS_DIR} empty?\n"
-            "Drop some .txt or .md files in there and try again."
+            f"Drop some .txt or .md files in there and try again.{detail}"
         )
 
     report = check_truncation(chunks)
@@ -237,6 +239,8 @@ def build_index(rebuild: bool = True) -> dict:
         "dimensions": len(vectors[0]),
         "embed_seconds": embed_seconds,
         "truncation": report,
+        "skipped": skipped,
+        "unfinished": find_unfinished_drafts(),
     }
 
 
@@ -302,7 +306,18 @@ def main() -> None:
             print(f"      {chunk_id}: {n} word-pieces")
         print(f"  Lower CHUNK_TARGET_WORDS in config.py and re-run.")
 
+    print_ingest_warnings(stats)
     print("\nCost of this step: $0.00 — no API calls.")
+
+
+def print_ingest_warnings(stats: dict) -> None:
+    """Shared by this module and the CLI menu."""
+    for name, why in stats.get("skipped", []):
+        print(f"\n⚠ Skipped {name}: {why}")
+    for name, count in stats.get("unfinished", {}).items():
+        print(f"\n⚠ {name} still has {count} unanswered TODO question(s). They are "
+              f"now indexed as if they were facts.\n"
+              f"  Move it back to drafts/ and finish it: python -m rag_buddy.todos")
 
 
 if __name__ == "__main__":

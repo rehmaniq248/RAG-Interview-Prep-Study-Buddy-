@@ -155,9 +155,25 @@ python -m rag_buddy.scaffold
 > **TODO:** The README notes this is "a clean reconstruction" of the original
 > migration. What broke or was lost in the original run that prompted the rebuild?
 
-Answer the TODOs, then move the file into `documents/` and re-index. Drafts are
-**not** indexed until you move them — an unedited draft is half open questions,
-and indexing it would treat those as facts about your career.
+Then answer the questions one at a time:
+
+```bash
+python -m rag_buddy.todos
+```
+
+Each question is shown with the sentence it's about. Type your answer and it
+gets written into the draft in the right place. `s` skips a question, `d`
+deletes one that doesn't apply, and `q` stops. Every answer is saved as you
+go, so you can finish a project across several sittings. Once nothing is left
+open, it offers to move the file into `documents/` and re-index.
+
+**If you're not sure of an answer, delete the question.** A finished write-up
+is the ground truth you get graded against, so a half-remembered detail here
+will mark you wrong in practice for telling the truth.
+
+Drafts are **not** indexed until they're moved. An unfinished draft is half
+open questions, and indexing it would store those as facts about your career.
+If one ever gets moved into `documents/` by hand too early, ingestion warns you.
 
 ## Interview mode
 
@@ -190,6 +206,7 @@ Type `skip` to pass on a question, `quit` to end the session.
 | Grading one answer | Claude Sonnet 5 | ~$0.010 |
 | Pulling GitHub repos | GitHub API | Free |
 | Drafting one write-up | Claude Haiku 4.5 | ~$0.009 |
+| Answering draft questions | Your machine | Free |
 | Question your docs can't answer | *no API call* | $0.00 |
 
 Only the last three rows cost money. Retrieved context is deliberately kept to
@@ -222,6 +239,7 @@ rag-study-buddy/
 │   ├── interview.py    generates questions and grades your answers
 │   ├── github.py       pulls README / structure / commits from your repos
 │   ├── scaffold.py     drafts project write-ups you finish
+│   ├── todos.py        walks you through a draft's questions
 │   └── cli.py          the menu tying it together
 ├── drafts/             generated write-ups awaiting your answers (gitignored)
 ├── chroma_db/          local vector store (generated, gitignored)

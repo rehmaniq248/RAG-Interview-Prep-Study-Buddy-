@@ -508,12 +508,46 @@ def chunk_document(path: Path) -> list[Chunk]:
     return pack_blocks_into_chunks(split_into_blocks(read_document(path)), source=path.name)
 
 
-def load_and_chunk_all(documents_dir: Path | None = None) -> list[Chunk]:
-    """Read and chunk every document. This is what step 3 will embed."""
+def load_and_chunk_all(
+    documents_dir: Path | None = None,
+    skipped: list[tuple[str, str]] | None = None,
+) -> list[Chunk]:
+    """
+    Read and chunk every document. This is what step 3 will embed.
+
+    Pass a list as `skipped` to collect unreadable files (a PDF renamed to .md,
+    say) and carry on with the rest. Without it, the first bad file raises —
+    which from the CLI menu would crash the whole session over one file.
+    """
     chunks: list[Chunk] = []
     for path in iter_document_paths(documents_dir):
-        chunks.extend(chunk_document(path))
+        try:
+            chunks.extend(chunk_document(path))
+        except ValueError as exc:
+            if skipped is None:
+                raise
+            skipped.append((path.name, str(exc).splitlines()[0]))
     return chunks
+
+
+def find_unfinished_drafts(documents_dir: Path | None = None) -> dict[str, int]:
+    """
+    Documents that still contain draft TODO markers.
+
+    A scaffolded draft moved into documents/ by hand, before its questions were
+    answered, would put those questions into the index as though they were
+    facts about your career. The guided `todos` flow refuses to do that; this
+    catches it when the move happened some other way.
+    """
+    found: dict[str, int] = {}
+    for path in iter_document_paths(documents_dir):
+        try:
+            count = read_document(path).count("**TODO:**")
+        except ValueError:
+            continue
+        if count:
+            found[path.name] = count
+    return found
 
 
 # ---------------------------------------------------------------------------

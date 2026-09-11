@@ -52,7 +52,7 @@ def show_status() -> None:
     from .scaffold import DRAFTS_DIR
     pending = len(list(DRAFTS_DIR.glob("*.md"))) if DRAFTS_DIR.is_dir() else 0
     if pending:
-        print(f"  Drafts  : {pending} awaiting your answers in drafts/ (not indexed)")
+        print(f"  Drafts  : {pending} awaiting your answers — option 6 (not indexed yet)")
 
     print(f"  API key : {'set' if have_key else 'NOT SET — options 2, 3 and 5 need one'}")
     print(f"  Models  : {config.GENERATION_MODEL} for answers, "
@@ -64,7 +64,7 @@ def do_ingest() -> None:
     """Chunk, embed and store every document. Local and free."""
     # Imported here so the menu opens instantly: importing store pulls in
     # torch, which takes a couple of seconds.
-    from .store import build_index
+    from .store import build_index, print_ingest_warnings
 
     print("\nReading documents/, chunking, and embedding locally…")
     try:
@@ -85,6 +85,7 @@ def do_ingest() -> None:
         for chunk_id, n in report.offenders[:5]:
             print(f"    {chunk_id}: {n} tokens")
         print("  Lower CHUNK_TARGET_WORDS in config.py and re-ingest.")
+    print_ingest_warnings(stats)
     print("Cost: $0.00 — this step never leaves your machine.")
 
 
@@ -206,6 +207,16 @@ def do_github() -> None:
           "searchable until you do.")
 
 
+def do_todos() -> None:
+    """Walk through a draft's open questions."""
+    from .todos import answer_draft, pick_draft
+
+    try:
+        answer_draft(pick_draft())
+    except RuntimeError as exc:
+        print(f"\n{exc}")
+
+
 def do_scaffold(usage: Usage) -> None:
     """Draft project write-ups from the fetched repositories."""
     from .scaffold import scaffold_all, DRAFTS_DIR
@@ -224,8 +235,8 @@ def do_scaffold(usage: Usage) -> None:
     usage.cost += cost
     usage.calls += len(written)
     print(f"\n{len(written)} draft(s) in {DRAFTS_DIR}, {todos} questions to answer.")
-    print("Drafts are NOT indexed. Answer the TODOs, then move each finished "
-          "file into documents/ and re-index with option 1.")
+    print("Drafts are NOT indexed yet. Choose option 6 to answer their "
+          "questions — it moves each one into documents/ when it's done.")
 
 
 MENU = """
@@ -234,8 +245,9 @@ MENU = """
   3. Interview mode        (it asks, you answer, it grades you)
   4. Sync GitHub repos     (pull READMEs, structure, commits — free)
   5. Draft write-ups       (turn repos into write-ups you finish — ~$0.01 each)
-  6. Refresh status
-  7. Quit
+  6. Answer draft questions (fill in the TODOs, one at a time — free)
+  7. Refresh status
+  8. Quit
 """
 
 
@@ -262,8 +274,10 @@ def main() -> None:
         elif choice == "5":
             do_scaffold(usage)
         elif choice == "6":
+            do_todos()
+        elif choice == "7":
             show_status()
-        elif choice in {"7", "q", "quit", "exit"}:
+        elif choice in {"8", "q", "quit", "exit"}:
             if usage.calls:
                 print(f"\nThis session: {usage.summary()}")
             print("Good luck in the interview.\n")
