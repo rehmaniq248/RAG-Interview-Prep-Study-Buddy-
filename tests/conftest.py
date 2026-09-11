@@ -124,9 +124,14 @@ class FakeUsage:
 
 
 class FakeResponse:
-    def __init__(self, text="ok", input_tokens=100, output_tokens=50, blocks=None):
+    def __init__(self, text="ok", input_tokens=100, output_tokens=50, blocks=None,
+                 stop_reason="end_turn"):
         self.content = blocks if blocks is not None else [FakeBlock(text)]
         self.usage = FakeUsage(input_tokens, output_tokens)
+        # Responses that ran out of room report "max_tokens". On a thinking
+        # model that can mean the whole budget went on reasoning and no visible
+        # text came back at all — which is what made grading look like a hang.
+        self.stop_reason = stop_reason
 
 
 class FakeMessages:

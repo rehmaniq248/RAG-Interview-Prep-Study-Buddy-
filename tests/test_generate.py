@@ -139,3 +139,36 @@ def test_get_client_requires_a_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         generate.get_client()
+
+
+class TestEmptyAndTruncatedResponses:
+    def test_no_text_blocks_raises_instead_of_returning_nothing(self, hits_with, fakes):
+        """
+        Regression: grading ran on a thinking model with a 1024-token budget,
+        spent all of it reasoning, and returned no text block at all. Joining
+        the text blocks gave "", the CLI printed nothing after "Grading…", and
+        the request was billed in full — indistinguishable from a hang.
+        """
+        hits_with(3.0)
+        client = fakes.Client(fakes.Response(blocks=[fakes.Block("", type="thinking")],
+                                             stop_reason="max_tokens"))
+        with pytest.raises(RuntimeError, match="no answer text"):
+            generate.answer_question("q", client=client)
+
+    def test_error_names_the_knob_to_turn(self, hits_with, fakes):
+        hits_with(3.0)
+        client = fakes.Client(fakes.Response(blocks=[], stop_reason="max_tokens"))
+        with pytest.raises(RuntimeError, match="MAX_OUTPUT_TOKENS"):
+            generate.answer_question("q", client=client)
+
+    def test_truncated_answer_is_kept_but_marked(self, hits_with, fakes):
+        hits_with(3.0)
+        client = fakes.Client(fakes.Response("You chose PostGIS because", stop_reason="max_tokens"))
+        answer = generate.answer_question("q", client=client)
+        assert "You chose PostGIS because" in answer.text
+        assert "cut off" in answer.text
+
+    def test_complete_answer_is_not_marked(self, hits_with, fakes):
+        hits_with(3.0)
+        client = fakes.Client(fakes.Response("A complete answer.", stop_reason="end_turn"))
+        assert generate.answer_question("q", client=client).text == "A complete answer."

@@ -103,6 +103,38 @@ def build_messages(question: str, hits: list[RetrievedChunk]) -> list[dict]:
     ]
 
 
+def extract_text(response, what: str = "answer") -> str:
+    """
+    Pull the visible text out of a response, and refuse to return nothing.
+
+    WHY THIS EXISTS: a model that thinks before answering spends its reasoning
+    out of the SAME max_tokens budget as the reply. Give it too little room and
+    it can use the entire budget thinking and return no text block at all.
+    Joining the text blocks then yields "", the caller prints an empty string,
+    and the tool looks like it hung — while the request was billed in full.
+    That is exactly what happened to grading with a 1024-token budget.
+
+    So: fail loudly and say which knob to turn, rather than printing silence.
+    A reply that was merely cut short is kept, with the truncation marked.
+    """
+    text = "".join(block.text for block in response.content if block.type == "text")
+    stop_reason = getattr(response, "stop_reason", None)
+
+    if not text.strip():
+        raise RuntimeError(
+            f"The model returned no {what} text (stop_reason={stop_reason!r}).\n"
+            "On a model that thinks before replying this usually means the whole "
+            "output budget went on reasoning. Raise EVALUATION_MAX_TOKENS (for "
+            "grading) or MAX_OUTPUT_TOKENS (for answers) in config.py, or lower "
+            "EVALUATION_EFFORT."
+        )
+
+    if stop_reason == "max_tokens":
+        text += ("\n\n[cut off: the model hit its output limit. Raise the token "
+                 "budget in config.py if this keeps happening.]")
+    return text
+
+
 # ---------------------------------------------------------------------------
 # Calling the API
 # ---------------------------------------------------------------------------
@@ -212,8 +244,7 @@ def answer_question(
     except anthropic.APIConnectionError:
         raise RuntimeError("Could not reach the Anthropic API. Check your connection.") from None
 
-    text = "".join(block.text for block in response.content if block.type == "text")
-    return Answer(text=text, hits=hits, usage=response.usage, model=model)
+    return Answer(text=extract_text(response), hits=hits, usage=response.usage, model=model)
 
 
 # ---------------------------------------------------------------------------

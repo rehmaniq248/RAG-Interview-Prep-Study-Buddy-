@@ -28,7 +28,7 @@ import sys
 import anthropic
 
 from . import config
-from .generate import format_context, get_client
+from .generate import extract_text, format_context, get_client
 from .retrieve import RetrievedChunk
 from .store import collection_stats, get_chunks_by_source
 
@@ -202,14 +202,22 @@ class Usage:
         )
 
 
-def _call(client, model, system, user, max_tokens):
-    """One message request, with the same typed error handling as step 5."""
+def _call(client, model, system, user, max_tokens, effort=None):
+    """
+    One message request, with the same typed error handling as step 5.
+
+    `effort` controls how much a thinking model reasons before replying. It is
+    only sent when given: Haiku 4.5 rejects the parameter outright, so question
+    generation must not pass it.
+    """
+    extra = {"output_config": {"effort": effort}} if effort else {}
     try:
         return client.messages.create(
             model=model,
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": user}],
+            **extra,
         )
     except anthropic.AuthenticationError:
         raise RuntimeError("Anthropic rejected the API key — check .env") from None
@@ -246,7 +254,7 @@ def generate_questions(
     if usage:
         usage.add(response, config.GENERATION_MODEL)
 
-    text = "".join(b.text for b in response.content if b.type == "text")
+    text = extract_text(response, "question")
     # Tolerate the model formatting "Q:" lines inconsistently. Strip BEFORE
     # removing the prefix: models sometimes indent the list, and "  Q: Why?"
     # does not start with "Q:" until the leading whitespace is gone — which
@@ -285,12 +293,15 @@ def grade_answer(
         f"The candidate's written notes:\n\n{format_context(excerpts)}\n\n"
         f"Question asked:\n{question}\n\n"
         f"The candidate's spoken answer:\n{answer}",
-        max_tokens=config.MAX_OUTPUT_TOKENS,
+        # Grading needs room for the model's reasoning AND the grade; see the
+        # measurement table beside EVALUATION_MAX_TOKENS in config.
+        max_tokens=config.EVALUATION_MAX_TOKENS,
+        effort=config.EVALUATION_EFFORT,
     )
     if usage:
         usage.add(response, model)
 
-    return "".join(b.text for b in response.content if b.type == "text")
+    return extract_text(response, "grade")
 
 
 # ---------------------------------------------------------------------------

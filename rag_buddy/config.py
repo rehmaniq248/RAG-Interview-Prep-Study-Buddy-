@@ -134,6 +134,27 @@ GENERATION_MODEL = "claude-haiku-4-5"
 # To revert, set this back to GENERATION_MODEL.
 EVALUATION_MODEL = "claude-sonnet-5"
 
+# Grading runs on a model that THINKS before it answers, and thinking tokens
+# come out of the same max_tokens budget as the grade itself. At 1024 — fine
+# for Haiku answers — Sonnet 5 spent the whole budget reasoning and returned no
+# grade at all in 2 of 3 trials. The CLI printed nothing after "Grading…",
+# which is indistinguishable from a hang, and the run was billed in full.
+#
+# Measured on one grading request (same prompt, same excerpts):
+#
+#   budget  effort   time   output   result
+#   1024    high      11s     1024   EMPTY in 2 of 3 runs
+#   4096    high      21s    ~2000   works, slow, ~$0.02
+#   4096    medium     7s     ~630   works
+#   2048    low        6s     ~500   works
+#
+# At both medium and low the grader still scored a vague answer WEAK, a
+# factually wrong one WEAK and a strong one STRONG, so low keeps the
+# discrimination that made Sonnet worth using while being faster and cheaper.
+# Raise EVALUATION_EFFORT to "medium" if grades ever feel shallow.
+EVALUATION_MAX_TOKENS = 2048
+EVALUATION_EFFORT = "low"        # low | medium | high
+
 # How many chunks we feed the model as context. Keeping this small is the main
 # cost control in the whole project: each extra chunk is extra input tokens on
 # every single question you ask.

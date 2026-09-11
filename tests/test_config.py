@@ -48,3 +48,13 @@ def test_distance_metric_is_cosine():
 
 def test_reranker_casts_wider_net_than_final_context():
     assert config.RERANK_CANDIDATES >= config.TOP_K
+
+
+def test_grading_has_more_room_than_answering():
+    # Grading runs on a thinking model: the reasoning and the grade share one
+    # budget. Sizing it like an answer produced empty grades.
+    assert config.EVALUATION_MAX_TOKENS > config.MAX_OUTPUT_TOKENS
+
+
+def test_evaluation_effort_is_a_valid_level():
+    assert config.EVALUATION_EFFORT in {"low", "medium", "high"}

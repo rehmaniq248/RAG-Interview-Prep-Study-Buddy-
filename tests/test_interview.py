@@ -138,3 +138,29 @@ def test_run_session_generates_grades_and_returns_usage(store_with, fakes, scrip
     assert usage.calls == 2
     assert client.messages.calls[1]["model"] == config.EVALUATION_MODEL
     assert "My answer to the first." in client.messages.calls[1]["messages"][0]["content"]
+
+
+def test_grading_gets_its_own_budget_and_effort(fakes, make_hit):
+    """
+    Grading runs on a thinking model, whose reasoning comes out of the same
+    max_tokens budget as the grade. Sized like an answer, it returned nothing.
+    """
+    client = fakes.Client(fakes.Response("VERDICT: WEAK — thin."))
+    interview.grade_answer("q", "a", [make_hit()], client=client)
+    call = client.messages.calls[0]
+    assert call["max_tokens"] == config.EVALUATION_MAX_TOKENS
+    assert call["output_config"] == {"effort": config.EVALUATION_EFFORT}
+
+
+def test_question_generation_sends_no_effort_setting(fakes, make_hit):
+    # Haiku 4.5 rejects the effort parameter outright.
+    client = fakes.Client(fakes.Response("Q: a?"))
+    interview.generate_questions([make_hit()], n=1, client=client)
+    assert "output_config" not in client.messages.calls[0]
+
+
+def test_empty_grade_raises_instead_of_printing_nothing(fakes, make_hit):
+    client = fakes.Client(fakes.Response(blocks=[fakes.Block("", type="thinking")],
+                                         stop_reason="max_tokens"))
+    with pytest.raises(RuntimeError, match="no grade text"):
+        interview.grade_answer("q", "a", [make_hit()], client=client)

@@ -203,7 +203,7 @@ Type `skip` to pass on a question, `quit` to end the session.
 | Storing / searching vectors | Your machine (ChromaDB) | Free |
 | Answering a question | Claude Haiku 4.5 | ~$0.0013 |
 | Generating interview questions | Claude Haiku 4.5 | ~$0.002 per round of 5 |
-| Grading one answer | Claude Sonnet 5 | ~$0.010 |
+| Grading one answer | Claude Sonnet 5 | ~$0.008 |
 | Pulling GitHub repos | GitHub API | Free |
 | Drafting one write-up | Claude Haiku 4.5 | ~$0.009 |
 | Answering draft questions | Your machine | Free |
@@ -212,6 +212,10 @@ Type `skip` to pass on a question, `quit` to end the session.
 Only the last three rows cost money. Retrieved context is deliberately kept to
 a handful of chunks rather than whole documents, which is what keeps questions
 cheap — roughly 770 questions per dollar.
+
+Grading also gets a larger token budget and low reasoning effort, because
+Sonnet thinks before it answers and that reasoning comes out of the same
+budget as the grade — sized like an answer, it returned empty grades.
 
 Grading is the one place that doesn't use Haiku. It was measured: Haiku graded
 a strong answer as merely "adequate" and manufactured faults to justify it,
