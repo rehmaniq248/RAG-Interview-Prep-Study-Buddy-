@@ -207,7 +207,7 @@ Type `skip` to pass on a question, `quit` to end the session.
 | Pulling GitHub repos | GitHub API | Free |
 | Drafting one write-up | Claude Haiku 4.5 | ~$0.009 |
 | Answering draft questions | Your machine | Free |
-| Question your docs can't answer | *no API call* | $0.00 |
+| Question your docs can't answer | Claude Haiku 4.5 | ~$0.0013 — it's told to say so, not guess |
 
 Only the last three rows cost money. Retrieved context is deliberately kept to
 a handful of chunks rather than whole documents, which is what keeps questions
@@ -253,7 +253,33 @@ overflowing its budget when overlap was carried over, the last-resort word
 split overshooting by the tokenizer's special tokens, and indented interview
 questions keeping their `Q:` prefix.
 
-Slower integration tests against the real models are marked `model`.
+### Integration tests
+
+These run the real embedding model, reranker, tokenizer and ChromaDB. The
+Anthropic API and GitHub are still blocked, so they cost nothing. They take
+about 20 seconds:
+
+```bash
+pytest -m model
+```
+
+They check that the pieces agree with the real models, since the chunker's
+tokenizer must count exactly like the embedding model's. They build and
+rebuild a real index, and walk through complete workflows: drafting a
+write-up, answering its questions, promoting it, and finding it again by
+search.
+
+They also run a **retrieval benchmark** on a fixed, fictional corpus. It checks
+that the right passage still reaches Claude, which is the thing a model or
+dependency upgrade can quietly break. Add `-s` to see the per-question report.
+
+That benchmark changed the tool's behaviour. Unanswerable questions used to be
+refused for free, using a reranker score threshold calibrated on one corpus. On
+the benchmark corpus, that threshold would have refused two questions the
+documents *did* answer. The score ranges of the two corpora overlap, so no
+single value is safe in general. Free refusal is now off by default: a wrong
+refusal hides your real experience, while the cost of asking is a fraction of
+a cent. `RERANK_MIN_SCORE` in `config.py` explains how to turn it back on.
 
 ## Privacy
 

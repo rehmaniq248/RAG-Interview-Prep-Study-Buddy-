@@ -77,7 +77,21 @@ class TestAnswerQuestion:
         client = fakes.Client(fakes.Response(blocks=blocks))
         assert generate.answer_question("Why?", client=client).text == "Part one. Part two."
 
-    def test_low_rerank_scores_answer_without_calling_the_api(self, hits_with):
+    def test_free_refusal_is_off_by_default(self, hits_with, fakes):
+        """
+        Measured, not cautious: the integration benchmark found answerable
+        questions scoring below the original -7.0 cutoff. A false refusal hides
+        real experience; a false send costs about $0.001. So by default every
+        question reaches the model, whose prompt handles the refusal.
+        """
+        assert config.RERANK_MIN_SCORE is None
+        hits_with(-11.0, -11.5)
+        client = fakes.Client(fakes.Response("Your documents don't cover this."))
+        generate.answer_question("q", client=client)
+        assert len(client.messages.calls) == 1
+
+    def test_when_enabled_low_scores_answer_without_calling_the_api(self, hits_with, monkeypatch):
+        monkeypatch.setattr(config, "RERANK_MIN_SCORE", -7.0)
         hits_with(-9.5, -10.2, -11.0)
         # No client passed: building a real one would trip the conftest blocker,
         # so this passing proves no client was ever constructed.
@@ -85,8 +99,10 @@ class TestAnswerQuestion:
         assert "don't appear to cover" in answer.text
         assert answer.cost == 0.0
 
-    def test_one_confident_hit_is_enough_to_call_the_api(self, hits_with, fakes):
-        hits_with(-10.0, config.RERANK_MIN_SCORE + 0.5)
+    def test_when_enabled_one_confident_hit_is_enough_to_call_the_api(self, hits_with, fakes,
+                                                                     monkeypatch):
+        monkeypatch.setattr(config, "RERANK_MIN_SCORE", -7.0)
+        hits_with(-10.0, -6.5)
         client = fakes.Client(fakes.Response("ok"))
         generate.answer_question("q", client=client)
         assert len(client.messages.calls) == 1

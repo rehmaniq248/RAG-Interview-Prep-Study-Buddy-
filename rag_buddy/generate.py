@@ -169,6 +169,10 @@ def answer_question(
     # it decline when the context does not support an answer — but it would
     # charge us to read four irrelevant passages first. This is the reranker's
     # own confidence, calibrated in config, spent nowhere.
+    #
+    # OFF by default (RERANK_MIN_SCORE is None). The integration benchmark found
+    # that a fixed cutoff can refuse questions the documents genuinely answer;
+    # see config for the numbers.
     scored = [h.rerank_score for h in hits if h.rerank_score is not None]
     if scored and config.RERANK_MIN_SCORE is not None:
         if max(scored) < config.RERANK_MIN_SCORE:

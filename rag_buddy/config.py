@@ -165,22 +165,33 @@ RERANK_CANDIDATES = 20
 # projects only ever sees one. The cap forces the context to spread.
 MAX_CHUNKS_PER_SOURCE = 2
 
-# Below this cross-encoder score, treat the corpus as having no real answer and
-# say so WITHOUT calling the API.
+# Optional: below this cross-encoder score, say the documents don't cover the
+# question WITHOUT calling the API. OFF by default (None) — because of a
+# measured failure, not caution.
 #
-# Step 4 warned against thresholding cosine similarity, and that warning still
-# stands: those scores are relative and shift with phrasing, so a cutoff picked
-# by intuition rejects correct answers. Cross-encoder scores are different in
-# kind — the model reads question and passage together and judges relevance
-# directly, so the number means something on its own. Measured on this corpus:
+# It was first calibrated at -7.0 on one real corpus, where the gap looked
+# comfortable:
 #
-#   answerable    -4.9 -4.5 -1.7 -1.3 +1.2 +2.4 +3.1 +3.7 +6.0 +6.8
-#   unanswerable  -11.3 -11.2 -11.1 -11.0 -9.2
+#   answerable    -4.9 … +6.8
+#   unanswerable  -11.3 … -9.2
 #
-# A 4.3-point gap, so -7.0 sits comfortably between with headroom either side.
-# Re-check it against your own documents if answers start being refused: the
-# CLI prints these scores. Set to None to disable and always call the API.
-RERANK_MIN_SCORE = -7.0
+# The integration benchmark (tests/integration/test_retrieval_quality.py) then
+# ran the same model over a different corpus, and -7.0 refused two questions
+# the documents DID answer, scoring -7.6 and -9.25. Across the two corpora the
+# ranges overlap outright — an answerable question scored -9.25 while an
+# unanswerable one scored -9.2 — so no single value separates them in general.
+#
+# The two possible errors are not equal. Sending an unanswerable question to
+# Claude costs about $0.0013, and the system prompt still makes it decline.
+# Refusing an answerable one silently hides your real experience from you,
+# which is the one thing this tool must never do. So it is off.
+#
+# To turn it on, calibrate against YOUR documents and choose a value well
+# below the lowest score of any question you know they answer. -10.5 refused
+# no answerable question on either corpus measured so far — but with only
+# about 1.25 points of margin, so treat it as a starting point, not a
+# guarantee.
+RERANK_MIN_SCORE: float | None = None
 
 # --- Interview mode (step 6) -----------------------------------------------
 # How many questions to generate per round.

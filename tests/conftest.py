@@ -2,7 +2,12 @@
 Shared fixtures.
 
 The autouse `isolate` fixture is the most important thing in the test suite.
-It runs before every test and guarantees that no test can:
+
+For EVERY test, core or integration, it blocks the Anthropic API and the
+GitHub CLI and sets a fake API key. Nothing in the suite can spend money or
+reach GitHub.
+
+For core tests it additionally guarantees that no test can:
 
   • read or write your real documents/, drafts/ or chroma_db/ — every path is
     redirected into a per-test temporary directory
@@ -24,6 +29,7 @@ properties of the real WordPiece tokenizer that matter here:
 """
 
 import math
+from pathlib import Path
 
 import anthropic
 import httpx2
@@ -49,8 +55,40 @@ def _blocked(name):
     return fail
 
 
+def _refuse_real_folders():
+    """
+    Integration tests use a real ChromaDB and real file writes. Their paths are
+    redirected by tests/integration/conftest.py; if a `model` test somehow runs
+    without that redirect, fail rather than let it near the project's folders.
+    """
+    checks = {
+        "documents/": (config.DOCUMENTS_DIR, config.PROJECT_ROOT / "documents"),
+        "chroma_db/": (config.CHROMA_DIR, config.PROJECT_ROOT / "chroma_db"),
+        "drafts/": (todos.DRAFTS_DIR, config.PROJECT_ROOT / "drafts"),
+        "drafts/ (scaffold)": (scaffold.DRAFTS_DIR, config.PROJECT_ROOT / "drafts"),
+        "documents/github/": (github.GITHUB_DIR, config.PROJECT_ROOT / "documents" / "github"),
+    }
+    for name, (live, project) in checks.items():
+        if Path(live).resolve() == project.resolve():
+            pytest.fail(
+                f"A `model` test would use the project's real {name} folder. "
+                "Integration tests must live under tests/integration/, whose "
+                "workspace fixture redirects every path."
+            )
+
+
 @pytest.fixture(autouse=True)
-def isolate(tmp_path, monkeypatch):
+def isolate(request, tmp_path, monkeypatch):
+    # Every test: never the real API, never GitHub.
+    monkeypatch.setattr(anthropic, "Anthropic", _Blocked)
+    monkeypatch.setattr(github, "_gh", _blocked("the GitHub CLI"))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
+
+    if request.node.get_closest_marker("model"):
+        # Real models and ChromaDB; paths handled by the integration workspace.
+        _refuse_real_folders()
+        return tmp_path
+
     documents = tmp_path / "documents"
     documents.mkdir()
     drafts = tmp_path / "drafts"
@@ -64,12 +102,9 @@ def isolate(tmp_path, monkeypatch):
         monkeypatch.setattr(module, "GITHUB_DIR", github_dir)
 
     monkeypatch.setattr(ingest, "count_tokens", fake_count_tokens)
-    monkeypatch.setattr(anthropic, "Anthropic", _Blocked)
     monkeypatch.setattr(store, "get_client", _blocked("ChromaDB"))
     monkeypatch.setattr(store, "get_embedder", _blocked("the embedding model"))
     monkeypatch.setattr(retrieve, "get_reranker", _blocked("the reranker"))
-    monkeypatch.setattr(github, "_gh", _blocked("the GitHub CLI"))
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-a-real-key")
     return tmp_path
 
 
