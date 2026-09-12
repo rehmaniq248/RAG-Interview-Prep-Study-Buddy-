@@ -27,6 +27,69 @@ documents/*.md ──▶ chunk ──▶ embed (local) ──▶ ChromaDB (local
                                           (the only paid step)
 ```
 
+## What it looks like
+
+Everything below is real output, produced from the fictional sample write-up in
+[`examples/`](examples/) — so you can reproduce it before adding your own files.
+
+**Asking a question.** The answer is built only from your documents, and cites
+which passage each claim came from:
+
+```
+$ python -m rag_buddy.generate "why did I choose PostGIS over storing coordinates myself"
+
+You chose PostGIS over storing raw coordinate arrays because your core query —
+"find trails whose path intersects this bounding box" — is fundamentally spatial
+in nature [1]. Storing coordinates yourself would have required loading every
+trail into memory on each request to answer that query in application code [1].
+PostGIS made it an indexed database query instead, which returned results in
+under 40ms against 12,000 trails [1][2].
+
+Sources:
+  [1] example_project_writeup.md § … > Architecture and the tradeoffs  (similarity 0.378)
+  [2] example_project_writeup.md § … > Architecture and the tradeoffs  (similarity 0.241)
+
+Tokens: 954 in, 129 out — cost $0.001599 (claude-haiku-4-5)
+```
+
+Ask about something your documents don't cover and it says so, instead of
+inventing an answer.
+
+**Interview mode** turns the same document into questions an interviewer would
+actually ask:
+
+```
+• Walk me through how you decided that a 6-hour cache window for trail conditions
+  was acceptable when a closure could take that long to appear — what would have
+  changed your mind?
+• You mentioned that your hiking speed model failed on steep terrain and a friend
+  caught it in the real world rather than your tests — what would you do
+  differently in the validation phase if you were to rebuild this?
+```
+
+Then it grades your answer against what your notes actually say:
+
+```
+VERDICT: STRONG — accurately reproduces the reasoning and figures from the notes
+with no contradictions.
+
+COVERED:
+- Correctly frames the core query as spatial: "find trails whose path intersects
+  this bounding box"
+- Correctly cites the result: "an indexed query that returned in under 40ms
+  against 12,000 trails"
+
+MISSING:
+- None substantive to the question asked.
+
+UNVERIFIABLE:
+- "I also briefly considered a geohash prefix index" — not in the notes. Not an
+  error, but worth adding to the write-up if it's true and relevant.
+```
+
+Citations and section headings are trimmed above to fit the page; everything else
+is verbatim.
+
 ## Setup
 
 Requires Python 3.10 or newer.
