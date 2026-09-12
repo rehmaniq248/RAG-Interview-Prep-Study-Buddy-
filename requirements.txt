@@ -9,6 +9,12 @@
 # time you run it, then runs offline on your CPU. No API, no per-token cost.
 sentence-transformers>=3.0.0
 
+# The tokenizer the chunker uses to measure chunks against the embedding
+# model's 256-word-piece window. It ships as a dependency of
+# sentence-transformers, but ingest.py imports it directly — so declare it
+# directly rather than relying on someone else's dependency tree.
+transformers>=4.40.0,<6.0.0
+
 # Local vector database. Stores chunks + their embeddings in a folder on disk
 # and does the nearest-neighbour search for retrieval. No server, no cost.
 chromadb>=0.5.0

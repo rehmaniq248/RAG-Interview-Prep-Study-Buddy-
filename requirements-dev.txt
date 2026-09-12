@@ -1,3 +1,12 @@
 # Everything needed to run the test suite:  pip install -r requirements-dev.txt
 -r requirements.txt
 pytest>=8.0
+
+# Used by the integration tests for vector arithmetic. Like transformers, it
+# arrives with the other dependencies, but the tests import it by name.
+numpy>=1.26
+
+# The test fixtures build real Anthropic error objects, which need an
+# httpx2 Response. It ships with the anthropic SDK, but the tests import it
+# by name — so declare it here too.
+httpx2

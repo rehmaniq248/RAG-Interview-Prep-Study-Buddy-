@@ -31,6 +31,10 @@ documents/*.md ──▶ chunk ──▶ embed (local) ──▶ ChromaDB (local
 
 Requires Python 3.10 or newer.
 
+The first run downloads two open-source models — about 90 MB for embeddings
+and 80 MB for reranking — and caches them. After that everything local works
+offline.
+
 ```bash
 git clone <this repo>
 cd rag-study-buddy
@@ -90,7 +94,8 @@ python -m rag_buddy.store
 ```
 
 This embeds every chunk on your machine and writes them to `chroma_db/`. The
-first run downloads the ~90 MB embedding model; after that it works offline.
+first run downloads the embedding model (~90 MB); the first search also
+downloads the reranker (~80 MB). After that both work offline.
 Re-run it whenever you edit your documents — it rebuilds from scratch, so no
 stale text survives.
 
@@ -315,6 +320,10 @@ rag-study-buddy/
 ├── requirements-dev.txt   adds pytest
 └── .env.example
 ```
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). Use it, change it, share it.
 
 ## Status
 
